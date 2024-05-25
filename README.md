@@ -47,6 +47,7 @@ Map legend:
 | Wall | * |
 | Open tile | (blank) |
 
+Simulator output on the left, real game (in a DS emulator) on the right:
 ![Beach Cave 1F Seed 0](documentation/images/Beach%20Cave%201F%200.png)
 ![Beach Cave 2F Seed 1234](documentation/images/Beach%20Cave%202F%201234.png)
 
