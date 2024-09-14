@@ -104,7 +104,7 @@ All of these are a high priority feature. Currently a blank floor (all wall tile
 
 # Building & Contributing
 
-To create a build directory and build inside it with CMake run `cmake -S . -B build` and `cmake --build build`. 
+To create a build directory and build inside it with CMake run `cmake -S . -B build` and `cmake --build build` from the project root. 
 If all goes well, the executable and required JSON file will be placed in `/build/pmd_nds_dungeon_gen`.
 
 If you're interested in the internals, also check out this projects sister repo [pmd-sky-dungeon-data-extractor](https://github.com/VMSaarelainen/pmd-sky-dungeon-data-extractor). For debugging the game in an emulator, I wrote a script for [dumping C structs from RAM](https://github.com/VMSaarelainen/FCEUX-array-of-structs-dumper). 

@@ -21,7 +21,7 @@ using json = nlohmann::json;
 int main(int argc, char *argv[]) {
 	try {
 		/* Define and parse args */
-		TCLAP::CmdLine cmd("", ' ', "1.0");
+		TCLAP::CmdLine cmd("", ' ', "1.1");
 		TCLAP::ValueArg<std::string> dun_name_arg("d", "dungeon", "Name of a dungeon or entry in the JSON file", true, "Beach Cave", "Name of a dungeon", cmd);
 		TCLAP::ValueArg<int> floor_num_arg("f", "floor", "A floor number, without affixes (i.e. not \"9F\" or \"B9F\")", true, 1, "Floor number", cmd);
 		TCLAP::ValueArg<int> rng_seed_arg("s", "seed", "A seed number in decimal in the range [0, UINT32_MAX].", false, 0, "RNG seed in decimal", cmd);

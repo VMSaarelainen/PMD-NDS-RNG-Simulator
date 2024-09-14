@@ -772,15 +772,15 @@ void Generator::GenerateExtraHallways(int num_hallways) {
 				if ((random_step_dist == 2) && (grid.x -1 <= random_start_y)) {
 					random_step_dist = 4;
 				}
-				if ((random_step_dist == 4) && (random_start_x < 1)) {
+				if ((random_step_dist == 4) && (random_start_y < 1)) {
 					random_step_dist = 6;
 				}
-				if ((random_step_dist == 6) && (random_start_y < 1)) {
+				if ((random_step_dist == 6) && (random_start_x < 1)) {
 					random_step_dist = 0;
 				}
 			}
 			
-			/* Used by the game for picking random directions. Seems to always be the same? */
+			/* Used by the game for randomness */
 			const std::array<int16_t, 64> memory_block = {
 				0, 0, 1, 0, 1, 0, 1, 0, 1, 0, 0, 0, 1, 0, -1, -1, 
 				0, 0, -1, -1, -1, -1, -1, -1, -1, -1, 0, 0, -1, -1, 1, 0, 
