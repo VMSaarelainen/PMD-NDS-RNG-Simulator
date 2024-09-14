@@ -12,9 +12,10 @@ This project was heavily based on reverse-engineering the game's binaries (see [
 This project aims to follows the ideas of the original games programming but with modern C++ idioms and structures.
 
 Cleaning up the decompiled code while making sure the end result stays the same is tricky, but doable with some time. 
-For example many parts of the game are written without memory reallocations, and not all of these have been rewritten using dynamic C++ containers like vectors (yet).
-Additionally the source code structure (for example which control flow statements were used) is not always obvious from the decompiled code. 
-Functions that suffer from this tend to be marked with a "TODO: clean up" or similar.
+For example many parts of the game are written without the use of memory reallocations, and not all of these have been rewritten using dynamic C++ containers like vectors (yet).
+Unfortunately the source code structure (for example which control flow statements were used) is not always obvious from the decompiled code. Functions that suffer from this tend to be marked with a "TODO: clean up" or similar.
+
+Function names in Pascal Case match up with the symbols in [pmdsky-debug](#credits).
 
 # What does it do
 
@@ -47,6 +48,7 @@ Map legend:
 | Wall | * |
 | Open tile | (blank) |
 
+Simulator output on the left, real game (in a DS emulator) on the right:
 ![Beach Cave 1F Seed 0](documentation/images/Beach%20Cave%201F%200.png)
 ![Beach Cave 2F Seed 1234](documentation/images/Beach%20Cave%202F%201234.png)
 
