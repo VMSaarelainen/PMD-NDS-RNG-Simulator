@@ -18,6 +18,8 @@
 #include <nlohmann/json.hpp>
 using json = nlohmann::json;
 
+thread_local tile default_tile = tile();		//owns the memory for a default-initialized tile. GetTile can return a (temporary) non-const ref to this tile.
+
 int main(int argc, char *argv[]) {
 	try {
 		/* Define and parse args */
@@ -103,7 +105,9 @@ floor_properties get_floor_props(std::string dungeon_name, int floor_num) {
 						.hidden_stairs_spawn_chance = props["hidden_stairs_spawn_chance"],
 						.enemy_iq = props["enemy_iq"],
 						.iq_booster_value = props["iq_booster_value"]
+						.has_extra_item = props.at("has_extra_item")
 					};
+
 					return floor_props;
 				}
 				catch(const json::exception& e) {
@@ -122,12 +126,13 @@ floor_properties get_floor_props(std::string dungeon_name, int floor_num) {
 }
 
 /* Entry point for dungeon generation, this is where the reverse engineered parts start.*/
-floor_t generateFloor(floor_properties floor_props, uint32_t seed) {
+status_vars generateFloor(floor_properties floor_props, uint32_t seed) {
 	std::shared_ptr<PRNG> rng = std::make_shared<PRNG>(PRNG(seed, true));
-	early_status_variables var;
+	status_vars var;
+	floor_t& floor = var.floor;	//convenience
+	bool generate_secondary_terrain = false;
 	
 	for (int gen_attempt_outer = 0; gen_attempt_outer < 10; gen_attempt_outer++) {
-		floor_t floor;
 		var.num_generation_attemps = gen_attempt_outer;
 		for (int n = 0; n < 10; n++) {
 
@@ -154,10 +159,10 @@ floor_t generateFloor(floor_properties floor_props, uint32_t seed) {
 					var.grid_size_y = 4;
 				}
 
-				if (floor_x / var.grid_size_x < 8) {
+				if (FLOOR_X / var.grid_size_x < 8) {
 					var.grid_size_x = 1;
 				}
-				if (floor_y / var.grid_size_y < 8) {
+				if (FLOOR_Y / var.grid_size_y < 8) {
 					//Note: skipped some changes to the dungeon struct here, looks like it just makes sure force_monster_house is false
 					var.grid_size_y = 1;
 				}
@@ -167,9 +172,9 @@ floor_t generateFloor(floor_properties floor_props, uint32_t seed) {
 					case floor_layout::LARGE:
 					case floor_layout::LARGE_0x8:
 					{
-						var.generate_secondary_terrain = true;
 						auto gen = Standard(rng, var, floor_props);
 						floor = gen.Generate();
+						generate_secondary_terrain = true;
 						break;
 					}
 					case floor_layout::SMALL:
@@ -177,9 +182,9 @@ floor_t generateFloor(floor_properties floor_props, uint32_t seed) {
 						var.floor_size = floor_size::SMALL;
 						var.grid_size_x = 4;
 						var.grid_size_y = rng->RandInt(2) + 2;
-						var.generate_secondary_terrain = true;
 						auto gen = Standard(rng, var, floor_props);
 						floor = gen.Generate();
+						generate_secondary_terrain = true;
 						break;
 
 					}
@@ -188,9 +193,9 @@ floor_t generateFloor(floor_properties floor_props, uint32_t seed) {
 						var.floor_size = floor_size::MEDIUM;
 						var.grid_size_x = 4;
 						var.grid_size_y = rng->RandInt(2) + 2;
-						var.generate_secondary_terrain = true;
 						auto gen = Standard(rng, var, floor_props);
 						floor = gen.Generate();
+						generate_secondary_terrain = true;
 						break;
 					}
 					case floor_layout::ONE_ROOM_MONSTER_HOUSE:
@@ -202,16 +207,16 @@ floor_t generateFloor(floor_properties floor_props, uint32_t seed) {
 					}
 					case floor_layout::OUTER_RING:
 					{
-						var.generate_secondary_terrain = true;
 						auto gen = OuterRing(rng, var, floor_props);
 						floor = gen.Generate();
+						generate_secondary_terrain = true;
 						break;
 					}
 					case floor_layout::CROSSROADS:
 					{
-						var.generate_secondary_terrain = true;
 						auto gen = Crossroads(rng, var, floor_props);
 						floor = gen.Generate();
+						generate_secondary_terrain = true;
 						break;
 					}
 					case floor_layout::TWO_ROOMS_WITH_MONSTER_HOUSE:
@@ -223,9 +228,9 @@ floor_t generateFloor(floor_properties floor_props, uint32_t seed) {
 					}
 					case floor_layout::LINE:
 					{
-						var.generate_secondary_terrain = true;
 						auto gen = Line(rng, var, floor_props);
 						floor = gen.Generate();
+						generate_secondary_terrain = true;
 						break;
 					}
 					case floor_layout::CROSS:
@@ -242,41 +247,64 @@ floor_t generateFloor(floor_properties floor_props, uint32_t seed) {
 					}
 					case floor_layout::OUTER_ROOMS:
 					{
-						var.generate_secondary_terrain = true;
 						auto gen = OuterRooms(rng, var, floor_props);
 						floor = gen.Generate();
+						generate_secondary_terrain = true;
 						break;
 					}
 				}
-				return floor;	//TODO: validity check
+
+				FinalizeJunctions(floor);
+				if (generate_secondary_terrain) {
+					GenerateSecondaryTerrainFormations(true, floor, floor_props, rng);	//not to be confused with "secondary structures"
+				}
+
+				[[maybe_unused]]bool itemless_monster_house = (rng->Rand100() < floor_props.itemless_monster_house_chance) ? true : false;
+				MarkNonEnemySpawns(floor, floor_props, itemless_monster_house, rng);	//this includes stairs
+				
+				//MarkEnemySpawns(floor_props, itemless_monster_house);
+				//ResolveInvalidSpawns();
 
 				// if stairs always reachable...
-				if (gen_attempt_outer >= 10) {	//Yes, this actually overwrites the floor that was generated on the 11th attempt. We can't change it without impacting the RNG though.
+				if (gen_attempt_outer >= 10) {	//Yes, this actually overwrites the floor that was generated on the 11th attempt no matter what. We can't change it without impacting the RNG though.
 					std::cout << "Generation failed! Generating back-up One-Room Monster House instead...\n";
 					auto gen = OneRoomMonsterHouse(rng, var, floor_props);
-					return gen.Generate();
+					var.floor = gen.Generate();
+					return var;
 				}
+				return var;
 			}
-			else {  //todo: implement fixed layouts
+
+			else {
 				std::cout << "Tried to generate fixed layout\n";
 				floor_t dummy;
-				return dummy;
+				var.floor = dummy;
+				return var;
 			}
 		}
 	}
 	std::cout << "Generation failed! Generating back-up One-Room Monster House instead...\n";
 	auto gen = OneRoomMonsterHouse(rng, var, floor_props);
-	return gen.Generate();
+	var.floor = gen.Generate();
+	return var;
 }
 
-/* Writes floor map to the provided stream (defaults to cout) */
 std::string get_floor_ascii(const floor_t& floor) {
 	std::stringstream o;
-    for (int j = 0; j < floor_y; j++) {
-        for (int i = 0; i < floor_x; i++) {
+    for (int j = 0; j < FLOOR_Y; j++) {
+        for (int i = 0; i < FLOOR_X; i++) {
             o << floor[i][j] << " ";
         }
         o << "\n";
 	}
 	return o.str();
+}
+
+/* Gets the tile at (x, y), unless (x, y) is out of bounds in which case returns a default tile through the first parameter. */
+tile& GetTile(floor_t& floor, const int x, const int y) {
+	if (x >= 0 && x < FLOOR_X && y >= 0 && y < FLOOR_Y) {
+		return floor[x][y];
+	}
+	default_tile = tile();
+	return default_tile;
 }

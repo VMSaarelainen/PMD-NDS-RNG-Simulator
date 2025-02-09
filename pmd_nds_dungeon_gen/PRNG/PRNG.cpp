@@ -27,7 +27,7 @@ uint32_t PRNG::Rand16Bit() {
     }
     else {
         std::cout << "WARN entered else in Rand16Bit\n";
-        upper += 0x269EC3;  //todo look into this
+        upper += 0x269EC3;  //these parts should only be required for secondary rng simulation
         return upper;
     }
 }

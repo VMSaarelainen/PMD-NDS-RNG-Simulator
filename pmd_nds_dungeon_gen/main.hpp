@@ -5,8 +5,10 @@
 
 #include <pmd2_dungeon_data_scraper/floor_props.hpp>
 
-constexpr int floor_x = 56;
-constexpr int floor_y = 32;
+const int FLOOR_X = 56;
+const int FLOOR_Y = 32;
+const int NO_ROOM = 0xFF;
+const int JUNCTION_ROOM = 0xFE;
 
 enum class floor_type {
 	NORMAL = 0,
@@ -37,12 +39,12 @@ enum class floor_size {
 /* Tile and floor definitions */
 struct tile {
 	::terrain terrain = ::terrain::WALL;
-	int roomID = 0xFF;
+	int roomID = NO_ROOM;
 	bool is_junction;
 	bool isMonsterHouse = false;
 	bool isKecleonShop = false;
 	bool isKeyDoor = false;
-	bool isUnreachableFromStairs = false;	//todo: default value?
+	bool isUnreachableFromStairs = false;
 	bool hasItem = false;
 	bool hasStairs = false;
 	bool hasTrap = false;
@@ -93,6 +95,7 @@ struct tile {
 typedef std::array<std::array<tile, floor_y>, floor_x> floor_t;
 
 /* Handy functions if you are interfacing directly with this project */
-floor_t generateFloor(floor_properties floor_props, uint32_t seed);
+status_vars generateFloor(floor_properties floor_props, uint32_t seed);
 floor_properties get_floor_props(std::string dungeon_name, int floor_num);
 std::string get_floor_ascii(const floor_t& floor);
+tile& GetTile(floor_t& floor, const int x, const int y);

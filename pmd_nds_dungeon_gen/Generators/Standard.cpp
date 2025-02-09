@@ -2,7 +2,10 @@
 #include <PRNG/PRNG.hpp>
 #include <Generators/AllTheGenerators.hpp>
 
-Standard::Standard(std::shared_ptr<PRNG> rng, early_status_variables var, floor_properties floor_props) : Generator(rng, var, floor_props) {};
+#include <main.hpp> //for debug
+#include <iostream>
+
+Standard::Standard(std::shared_ptr<PRNG> rng, status_vars var, floor_properties floor_props) : Generator(rng, var, floor_props) {};
 
 floor_t Standard::Generate() {
 	int cursor_x;

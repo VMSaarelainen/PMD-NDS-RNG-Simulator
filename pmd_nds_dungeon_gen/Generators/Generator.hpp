@@ -6,16 +6,27 @@
 #include <main.hpp>
 #include <PRNG/PRNG.hpp>
 
-/* Generator internals */
 
 // Some parameters that need to be tracked before Generator instantiation
-struct early_status_variables {
+struct status_vars {
     int num_generation_attemps = 0;
     int grid_size_x = 2;
     int grid_size_y = 2;
-    bool generate_secondary_terrain = false;
     ::floor_size floor_size = ::floor_size::LARGE;
+	floor_t floor;
+	int main_spawn_x = -1;
+	int main_spawn_y = -1;
+	int teammate_1_spawn_x = -1;
+	int teammate_1_spawn_y = -1;
+	int teammate_2_spawn_x = -1;
+	int teammate_2_spawn_y = -1;
+	int teammate_3_spawn_x = -1;
+	int teammate_3_spawn_y = -1;
+	int stair_x = -1;
+	int stair_y = -1;
 };
+
+/* Generator internals */
 
 struct gridcell_t {
 	int start_x = 0;
@@ -92,7 +103,7 @@ struct gridcell_t {
 };
 
 struct floor_generation_status {
-	::floor_type floor_type = ::floor_type::NORMAL;		//TODO: namespace this entire project so this would be less ugly
+	::floor_type floor_type = ::floor_type::NORMAL;
 	bool second_spawn;
 	bool has_monster_house = false;
 	int stairs_room;
@@ -111,8 +122,6 @@ struct floor_generation_status {
 	bool generate_secondary_terrain = false;
 	bool failedToGenerateFloorFlag = false;
 
-	//TODO: missions substruct here
-
 	bool can_spawn_mon_house() {
 		if (/* (!missions.isOutlawMonsterHouseFloor() || !missions.isDestinationFloorWithMonster()) && */ floor_type == floor_type::NORMAL) {
 			return true;
@@ -121,16 +130,17 @@ struct floor_generation_status {
 	}
 };
 
+///////////////////////////////////////////////////////////////////////
 
 class Generator {
     public:
-        Generator(std::shared_ptr<PRNG> prng, early_status_variables var, floor_properties floor_props);
+        Generator(std::shared_ptr<PRNG> prng, status_vars var, floor_properties floor_props);
         virtual floor_t Generate() = 0;
         virtual ~Generator() = default;
     protected:
         struct gridCoords_t {
-            std::array<int, 15> x;
-            std::array<int, 15> y;
+            std::array<int, 15> x = {0};
+            std::array<int, 15> y = {0};
         };
 
         struct grid_t {
@@ -144,7 +154,7 @@ class Generator {
             grid_t() = default;
         };
 
-        floor_t floor;
+        floor_t& floor;
         std::shared_ptr<PRNG> rng;  //rng is also used outside this class, and the internal rng state needs to carry through potentially several Generator objects
         floor_generation_status status;
         floor_properties floor_props;
@@ -172,11 +182,15 @@ class Generator {
         bool IsNextToHallway(int x, int y);
         void SetTerrainObstacleChecked(tile& tile, bool use_secondary_terrain, int roomID);
         void markTiles(const int minX, const int minY, const int maxX, const int maxY, std::function<void(tile&)> applyMark);
+		void markTiles(const gridcell_t&, std::function<void(tile&)> applyMark);
         void TryMergeRooms(gridcell_t& origin, gridcell_t& target);
         void resetOuterEdgeTiles();
         void ResetInnerBoundaryTileRows();
         void EnsureImpassableTilesAreWalls();
         void CreateHallway(int x0, int y0, int x1, int y1, bool vertical, int x_mid, int y_mid);
-        void Finalize();
-        void FinalizeJunctions();
 };
+
+//these are called in main, but they work more like the generator functions
+void FinalizeJunctions(floor_t&);
+void GenerateSecondaryTerrainFormations(bool, floor_t&, floor_properties, std::shared_ptr<PRNG>);
+void MarkNonEnemySpawns(floor_t&, status_vars, floor_properties, bool, std::shared_ptr<PRNG>);

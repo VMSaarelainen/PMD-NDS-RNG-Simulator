@@ -5,23 +5,23 @@
 
 class Beetle: public Generator {
     public:
-        Beetle(std::shared_ptr<PRNG> rng, early_status_variables var, floor_properties floor_props);
+        Beetle(std::shared_ptr<PRNG> rng, status_vars var, floor_properties floor_props);
         floor_t Generate() override;
 };
 
 class Cross: public Generator {
     public:
-        Cross(std::shared_ptr<PRNG> rng, early_status_variables var, floor_properties floor_props);
+        Cross(std::shared_ptr<PRNG> rng, status_vars var, floor_properties floor_props);
         floor_t Generate() override;
 };
 class Crossroads: public Generator {
     public:
-        Crossroads(std::shared_ptr<PRNG> rng, early_status_variables var, floor_properties floor_props);
+        Crossroads(std::shared_ptr<PRNG> rng, status_vars var, floor_properties floor_props);
         floor_t Generate() override;
 };
 class Line: public Generator {
     public:
-        Line(std::shared_ptr<PRNG> rng, early_status_variables var, floor_properties floor_props);
+        Line(std::shared_ptr<PRNG> rng, status_vars var, floor_properties floor_props);
         floor_t Generate() override;
 };
 // class Fixed: public Generator {
@@ -31,29 +31,29 @@ class Line: public Generator {
 // };
 class OneRoomMonsterHouse: public Generator {
     public:
-        OneRoomMonsterHouse(std::shared_ptr<PRNG> rng, early_status_variables var, floor_properties floor_props);
+        OneRoomMonsterHouse(std::shared_ptr<PRNG> rng, status_vars var, floor_properties floor_props);
         floor_t Generate() override;
 };
 
 class OuterRing: public Generator {
     public:
-        OuterRing(std::shared_ptr<PRNG> rng, early_status_variables var, floor_properties floor_props);
+        OuterRing(std::shared_ptr<PRNG> rng, status_vars var, floor_properties floor_props);
         floor_t Generate() override;
 };
 
 class OuterRooms: public Generator {
     public:
-        OuterRooms(std::shared_ptr<PRNG> rng, early_status_variables var, floor_properties floor_props);
+        OuterRooms(std::shared_ptr<PRNG> rng, status_vars var, floor_properties floor_props);
         floor_t Generate() override;
 };
 
 class Standard: public Generator {
     public:
-        Standard(std::shared_ptr<PRNG> rng, early_status_variables var, floor_properties floor_props);
+        Standard(std::shared_ptr<PRNG> rng, status_vars var, floor_properties floor_props);
         floor_t Generate() override;
 };
 class TwoRoomsWithMonsterHouse: public Generator {
     public:
-        TwoRoomsWithMonsterHouse(std::shared_ptr<PRNG> rng, early_status_variables var, floor_properties floor_props);
+        TwoRoomsWithMonsterHouse(std::shared_ptr<PRNG> rng, status_vars var, floor_properties floor_props);
         floor_t Generate() override;
 };

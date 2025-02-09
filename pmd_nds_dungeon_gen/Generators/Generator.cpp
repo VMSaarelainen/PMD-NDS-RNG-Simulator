@@ -8,25 +8,24 @@
 #include <Generators/Generator.hpp>
 #include <pmd2_dungeon_data_scraper/floor_props.hpp>
 
-Generator::Generator(std::shared_ptr<PRNG> prng, early_status_variables var, floor_properties props) {
+Generator::Generator(std::shared_ptr<PRNG> prng, status_vars var, floor_properties props) {
 	rng = prng;
 	grid.x = var.grid_size_x;
     grid.y = var.grid_size_y;
 	status.floor_size = var.floor_size;
-	status.generate_secondary_terrain = var.generate_secondary_terrain;
 	status.num_generation_attemps = var.num_generation_attemps;
 	floor_props = props;
-	default_tile = tile();
+	floor = var.floor;
+	default_tile = tile();	//TODO: should probably be smart pointer-ed instead
 }
 
 /* Gets the tile at (x, y), unless (x, y) is out of bounds in which case returns a default tile. */
 tile& Generator::GetTile(const int x, const int y) {
-	if (x >= 0 && x < floor_x && y >= 0 && y < floor_y) {
+	if (x >= 0 && x < FLOOR_X && y >= 0 && y < FLOOR_Y) {
 		return floor[x][y];
 	}
 	default_tile = tile();
 	return default_tile;
-	
 }
 
 void Generator::GetGridPositions(int size_x, int size_y) {
@@ -35,13 +34,13 @@ void Generator::GetGridPositions(int size_x, int size_y) {
 	int c = 0;
 	for (int i = 0; i <= size_x; i++) {
 		gridCoords.x[i] = c;
-		c += 56 / size_x;
+		c += FLOOR_X / size_x;
 	}
 
 	c = 0;
 	for (int i = 0; i <= size_y; i++) {
 		gridCoords.y[i] = c;
-		c += 32 / size_y;
+		c += FLOOR_Y / size_y;
 	}
 
 	this->gridCoords = gridCoords;
@@ -122,20 +121,21 @@ void Generator::AssignRooms(int num_rooms, std::optional<bool> exact_num_rooms) 
 void Generator::CreateRoomsAndAnchors() {
 	int room_num = 0;
 	for (int j = 0; j < grid.y; j++) {
-		for (int i = 0; i < grid.x; i++) {   //note i and j reversed from standard for some reason
+		for (int i = 0; i < grid.x; i++) {   //note this function loops column-wise, unlike most other parts of the algorithm
 			/* A lot of one-letter variables ahead, most of it is just some maths to make things appear more random */
 			int a = gridCoords.x[i] + 2;
 			int b = gridCoords.y[j] + 2;
 			int c = (gridCoords.x[i + 1] - gridCoords.x[i]) -4;
 			int d = (gridCoords.y[j + 1] - gridCoords.y[j]) -3;
+			auto& cell = grid.cells[i][j];
 
-			if (!grid.cells[i][j].is_invalid) {
-				if (!grid.cells[i][j].is_room) {
+			if (!cell.is_invalid) {
+				if (!cell.is_room) {
 					int e = 2;
 					int f = 2;
 					int g = 4;
 					int h = 4;
-
+					
 					if (i == 0) {
 						f = 1;
 					}
@@ -149,13 +149,13 @@ void Generator::CreateRoomsAndAnchors() {
 						h = 2;
 					}
 
-					int rand_x = rng->RandRange(a + f,(a + c) - g);
-					int rand_y = rng->RandRange(b + e,(b + d) - h);
+					int rand_x = rng->RandRange(a + f, (a + c) - g);
+					int rand_y = rng->RandRange(b + e, (b + d) - h);
 
-					grid.cells[i][j].start_x = rand_x;
-					grid.cells[i][j].end_x = rand_x +1;
-					grid.cells[i][j].start_y = rand_y;
-					grid.cells[i][j].end_y = rand_y +1;
+					cell.start_x = rand_x;
+					cell.end_x = rand_x +1;
+					cell.start_y = rand_y;
+					cell.end_y = rand_y +1;
 					auto& t = GetTile(rand_x, rand_y);
 					t.is_junction = true;
 					t.roomID = 0xFE;
@@ -171,27 +171,31 @@ void Generator::CreateRoomsAndAnchors() {
 					if ((randB | 1) < d) {
 						randB = randB | 1;
 					}
+					int temp = randB * 3 / 2;
 					if ((randB * 3 / 2) < randA) {
-						randA = randB * 3 / 2;
+						randA = temp;
 					}
-					if ((randA * 3 / 2) < randB) {
-						randB = randA * 3 / 2;
+					temp = randA * 3 / 2;
+					if (temp < randB) {
+						randB = temp;
 					}
 
 					a += rng->RandInt(c - randA);
 					b += rng->RandInt(d - randB);
-					grid.cells[i][j].start_x = a;
-					grid.cells[i][j].end_x = a + randA;
-					grid.cells[i][j].start_y = b;
-					grid.cells[i][j].end_y = b + randB;
+					cell.start_x = a;
+					cell.end_x = a + randA;
+					cell.start_y = b;
+					cell.end_y = b + randB;
 					
 					auto mark_room = [=](tile& t) { t.terrain = terrain::NORMAL;
 													t.roomID = room_num; };
-					markTiles(a, b, a + randA, b + randB, mark_room);
+					markTiles(cell, mark_room);
 
-					bool flag1 = floor_props.f_secondary_structures && rng->RandInt(100) < 50;
+					int chance = rng->RandInt(100);
+					//TODO: Figure out how to clean up
+					bool flag1 = floor_props.f_secondary_structures && chance < 50;
 					bool flag2 = floor_props.max_secondary_structures;
-					if (flag1 && flag2) {
+					if (floor_props.f_secondary_structures && chance < 50 && flag2) {
 						int rand = rng->RandInt(100);
 						flag2 = 0x31 < rand && flag2;
 						if (a < 49) {
@@ -199,10 +203,10 @@ void Generator::CreateRoomsAndAnchors() {
 						}
 					}
 					if (flag1) {
-						grid.cells[i][j].flag_secondary_structure = true;
+						cell.flag_secondary_structure = true;
 					}
 					if (flag2) {
-						grid.cells[i][j].flag_imperfect = true;
+						cell.flag_imperfect = true;
 					}
 					
 					room_num++;
@@ -568,10 +572,10 @@ void Generator::EnsureConnectedGrid() {
 					auto& cell = grid.cells[i][j]; 
 					if (!cell.is_invalid && !cell.is_connected && !cell.was_merged_into_other_room && !cell.field_0xf) {
 						auto erase = [] (tile& t) { 
-							t.roomID = 0xFF; 
+							t.roomID = NO_ROOM; 
 							t.terrain = terrain::WALL; 
 						};
-						markTiles(cell.start_x, cell.start_y, cell.end_x, cell.end_y, erase);
+						markTiles(cell, erase);
 					}
 				}
 			}
@@ -697,7 +701,7 @@ bool Generator::GenerateKecleonShop(int spawnChance) {
 						if (cell.can_spawn_kek_shop()) {
 							if (abs(cell.end_x - cell.start_x) > 4 && abs(cell.end_y - cell.start_y) > 3) {		//room is at least 4x3
 								cell.is_kecleon_shop = true;
-								markTiles(cell.start_x, cell.start_y, cell.end_x, cell.end_y, [](tile& t) { t.isKecleonShop = true; });
+								markTiles(cell, [](tile& t) { t.isKecleonShop = true; });
 								//here the game writes the shop coordinates into the status struct, but that doesnt get used for the rest of (this part of) the algorithm
 								//additionally, it sets the f_items flag for each tile in the grid cell
 								return true;
@@ -742,7 +746,7 @@ bool Generator::GenerateMonsterHouse(int spawnChance) {
 						auto& cell = grid.cells[i][j];
 						//here the game actually sets a flag marked unknown in the decompile project
 						//presumably, the real in_monster_house flag is set at a later stage. We'll just set it right away.
-						markTiles(cell.start_x, cell.start_y, cell.end_x, cell.end_y, [](tile& t) { t.isMonsterHouse = true; });
+						markTiles(cell, [](tile& t) { t.isMonsterHouse = true; });
 						//also, it writes the room ID into the dungeon struct presumably also to be used later
 						return true;
 					}
@@ -802,7 +806,7 @@ void Generator::GenerateExtraHallways(int num_hallways) {
 				bool break_outer = false;
 				for (int i = cursor_x -2;  i <= cursor_x + 2; i++) {
 					for (int j = cursor_y -2; j <= cursor_y + 2; j++) {
-						if (i < 0 || i > floor_x -1 || j < 0 || j > floor_y -1) {
+						if (i < 0 || i > FLOOR_X -1 || j < 0 || j > FLOOR_Y -1) {
 							break_outer = true;
 							break;
 						}
@@ -818,7 +822,7 @@ void Generator::GenerateExtraHallways(int num_hallways) {
 					{
 						int rand = rng->RandInt(3) + 3;
 						while (cursor_x > 1 && cursor_y > 1 && 
-							   cursor_x < floor_x -1 && cursor_y < floor_y -1 &&
+							   cursor_x < FLOOR_X -1 && cursor_y < FLOOR_Y -1 &&
 							   GetTile(cursor_x, cursor_y).terrain != terrain::NORMAL /* &&
 							   GetTile(cursor_x, cursor_y).is_impassable = false */ 	// uncomment in case impassable flag gets implemented
 						)
@@ -871,7 +875,7 @@ void Generator::GenerateExtraHallways(int num_hallways) {
 								}
 								random_step_dist &= 6;
 
-								if (random_step_dist == 2 && ( (cursor_x > floor_y -1 && status.floor_size == floor_size::SMALL) || (cursor_y > 0x2f && status.floor_size == floor_size::MEDIUM) )) {
+								if (random_step_dist == 2 && ( (cursor_x > FLOOR_Y -1 && status.floor_size == floor_size::SMALL) || (cursor_y > 0x2f && status.floor_size == floor_size::MEDIUM) )) {
 									break;
 								}
 							}
@@ -943,7 +947,7 @@ void Generator::GenerateRoomImperfections() {
 // 					case 2:
 // 						if (n != 0) {
 // 							b = 0;
-// 							a = 0xffffffff;
+// 							a = no_roomffffff;
 // 							uVar6 = ffffff;
 // 						}
 // 						else {
@@ -1080,7 +1084,7 @@ void Generator::GenerateSecondaryStructures() {
 							for (int x = cell.start_x; x < cell.end_x -1; x++) {
 								if (!IsNextToHallway(x, half_y)) {
 									markTiles(cell.start_x, half_y, cell.end_x, half_y, [](tile& t){ t.terrain = terrain::SECONDARY; });
-									markTiles(cell.start_x, cell.start_y, cell.end_x, cell.end_y, [](tile& t){ t.isUnreachableFromStairs = true; });
+									markTiles(cell, [](tile& t){ t.isUnreachableFromStairs = true; });
 								}
 							}
 							cell.has_secondary_structure = true;
@@ -1090,7 +1094,7 @@ void Generator::GenerateSecondaryStructures() {
 							for (int y = cell.start_y; y < cell.end_y -1; y++) {
 								if (!IsNextToHallway(y, half_x)) {
 									markTiles(half_x, cell.start_y, half_x, cell.end_y, [](tile& t){ t.terrain = terrain::SECONDARY; });
-									markTiles(cell.start_x, cell.start_y, cell.end_x, cell.end_y, [](tile& t){ t.isUnreachableFromStairs = true; });
+									markTiles(cell, [](tile& t){ t.isUnreachableFromStairs = true; });
 								}
 							}
 							cell.has_secondary_structure = true;
@@ -1107,17 +1111,17 @@ bool Generator::IsNextToHallway(int x, int y) {		//todo: pass tile&
 	for (int i = -1; i <= 1; i++) {	// -1, 0, 1
 		const int x_00 = x + i;
 		if (x_00 >= 0) {
-			if (x_00 < floor_x -1) {
+			if (x_00 < FLOOR_X -1) {
 				return false;
 			}
 			for (int j = -1; j <= 1; j++) {
 				const int y_00 = y + j;
-				if (y_00 > floor_y -1) {
+				if (y_00 > FLOOR_Y -1) {
 					break;
 				}
 				if ((i == 0 || j == 0) &&
 					 GetTile(i, j).terrain == terrain::NORMAL &&
-					 GetTile(i, j).roomID == 0xFF )
+					 GetTile(i, j).roomID == NO_ROOM )
 				{
 					return true;
 				}
@@ -1239,12 +1243,25 @@ void Generator::SetTerrainObstacleChecked(tile& tile, bool use_secondary_terrain
 	return;
 }
 
-void Generator::markTiles(const int minX, const int minY, const int maxX, const int maxY, std::function<void(tile&)> apply_mark) {
-	for (int i = minX; i < maxX; i++) {	
-		for (int j = minY; j < maxY; j++) {
-			apply_mark(GetTile(i, j));
+/* Apply mark function to all tiles in bounds in the provided floor */
+void markTiles(floor_t& floor, const int minX, const int minY, const int maxX, const int maxY, std::function<void(tile&)> apply_mark) {
+	if (minX > 0 && maxX <= FLOOR_X && minY > 0 && maxY <= FLOOR_Y) {
+		for (int i = minX; i < maxX; i++) {	
+			for (int j = minY; j < maxY; j++) {
+				apply_mark(floor[i][j]);
+			}
 		}
 	}
+}
+
+/* Apply mark function to all tiles in bounds */
+void Generator::markTiles(const int minX, const int minY, const int maxX, const int maxY, std::function<void(tile&)> apply_mark) {
+	::markTiles(floor, minX, minY, maxX, maxY, apply_mark);
+}
+
+/* Apply mark function to all tiles in cells bounded by cell start/end coords */
+void Generator::markTiles(const gridcell_t& cell, std::function<void(tile&)> apply_mark) {
+	markTiles(cell.start_x, cell.start_y, cell.end_x, cell.end_y, apply_mark);
 }
 
 void Generator::resetOuterEdgeTiles() {
@@ -1254,10 +1271,10 @@ void Generator::resetOuterEdgeTiles() {
 
 void Generator::ResetInnerBoundaryTileRows() {
 	auto wall = [](tile& t) { t.terrain = terrain::WALL; };
-	markTiles(0,  0,  0,  floor_y, wall);
-	markTiles(floor_x, 0,  floor_x, floor_y, wall);
-	markTiles(0,  1,  floor_x, 1,  wall);
-	markTiles(0,  30, floor_x, 30, wall);
+	markTiles(0,  0,  0,  FLOOR_Y, wall);
+	markTiles(FLOOR_X, 0,  FLOOR_X, FLOOR_Y, wall);
+	markTiles(0,  1,  FLOOR_X, 1,  wall);
+	markTiles(0,  30, FLOOR_X, 30, wall);
 }
 
 void Generator::EnsureImpassableTilesAreWalls() {
@@ -1274,15 +1291,13 @@ void Generator::CreateHallway(int x0, int y0, int x1, int y1, bool vertical, int
 	int y = y0;
 	if (!vertical) {
 		while (x != x_mid) {
-			if (count > floor_x -1) { return; }
-
+			if (count > FLOOR_X -1) { return; }
 			if (GetTile(x, y0).terrain == terrain::NORMAL) {
 				if (x != x0) { return; }
 			}
 			else {
 				GetTile(x, y0).terrain = terrain::NORMAL;
 			}
-
 			if (x < x_mid) {
 				x++;
 				count++;
@@ -1291,7 +1306,6 @@ void Generator::CreateHallway(int x0, int y0, int x1, int y1, bool vertical, int
 				x--;
 				count--;
 			}
-
 		}
 		
 		count = 0;
@@ -1300,9 +1314,7 @@ void Generator::CreateHallway(int x0, int y0, int x1, int y1, bool vertical, int
 				count = 0;
 				while (true) {
 					if (x == x1) { return; }
-
-					if (count > floor_x -1) { break; }
-
+					if (count > FLOOR_X -1) { break; }
 					if (GetTile(x, y).terrain == terrain::NORMAL) {
 						if (x != x0 || y != y0) {
 							return;
@@ -1311,7 +1323,6 @@ void Generator::CreateHallway(int x0, int y0, int x1, int y1, bool vertical, int
 					else {
 						GetTile(x, y).terrain = terrain::NORMAL;
 					}
-
 					if (x < x1) {
 						x++;
 						count++;
@@ -1324,8 +1335,7 @@ void Generator::CreateHallway(int x0, int y0, int x1, int y1, bool vertical, int
 				return;
 			}
 
-			if (floor_x -1 < count) { return; }
-
+			if (FLOOR_X -1 < count) { return; }
 			if (GetTile(x, y).terrain == terrain::NORMAL) {
 				if (x != x0 || y != y0) {
 					return;
@@ -1346,11 +1356,11 @@ void Generator::CreateHallway(int x0, int y0, int x1, int y1, bool vertical, int
 		}
 		return;
 	}
-	while (y != y_mid) {
-		if (floor_x -1 < count) {
-			return;
-		}	
 
+	while (y != y_mid) {
+		if (FLOOR_X -1 < count) {
+			return;
+		}
 		if (GetTile(x0, y).terrain == terrain::NORMAL) {
 			if (y != y0) {
 				return;
@@ -1359,7 +1369,6 @@ void Generator::CreateHallway(int x0, int y0, int x1, int y1, bool vertical, int
 		else {
 			GetTile(x0, y).terrain = terrain::NORMAL;
 		}
-
 		if (y < y_mid) {
 			y++;
 			count++;
@@ -1368,13 +1377,11 @@ void Generator::CreateHallway(int x0, int y0, int x1, int y1, bool vertical, int
 			y--;
 			count--;
 		}
-
 	}
 
 	count = 0;
 	while (x != x1) {
-		if (floor_x -1 < count) { return; }
-
+		if (FLOOR_X -1 < count) { return; }
 		if (GetTile(x, y).terrain == terrain::NORMAL) {
 			if (x != x0 || y != y0) {
 				return;
@@ -1383,7 +1390,6 @@ void Generator::CreateHallway(int x0, int y0, int x1, int y1, bool vertical, int
 		else {
 			GetTile(x, y).terrain = terrain::NORMAL;
 		}
-
 		if (x < x1) {
 			x++;
 			count++;
@@ -1398,7 +1404,7 @@ void Generator::CreateHallway(int x0, int y0, int x1, int y1, bool vertical, int
 	while (true) {
 		if (y == y1) { return; }
 
-		if (floor_x -1 < count) { break; }
+		if (FLOOR_X -1 < count) { break; }
 
 		if (GetTile(x, y).terrain == terrain::NORMAL) {
 			if (x != x0 || y != y0) {
@@ -1421,57 +1427,354 @@ void Generator::CreateHallway(int x0, int y0, int x1, int y1, bool vertical, int
 	return;
 }
 
-/* In the games code this is originally done outside the function that generates the floors themselves, but all the generators execute this to finish up. */
-void Generator::Finalize() {
-	resetOuterEdgeTiles();
-	//TODO: skipping shuffling some room ID's around, shouldn't impact the layout of the floor but should maybe still be implemented later
-	if (status.num_generation_attemps >= 10) {
-		return;
-	}
-	FinalizeJunctions();
-}
-
-/* Note: this function intentionally emulates a bug in the game. For details see FinalizeJunctions() in the pmdsky-debug project.
+/* 
+ * Note: this function intentionally emulates a bug in the game. For details see FinalizeJunctions() in the pmdsky-debug project.
  * Basically this is supposed to ensure there is no water or lava near a junction point.
  */
-void Generator::FinalizeJunctions() {
-	for (int i = 0; i < floor_y; i++) {
-		for (int j = 0; j < floor_x; j++) {
-			if (GetTile(i, j).terrain == terrain::NORMAL && GetTile(i, j).roomID == 0xFF) {
-				tile& t = GetTile(i -1, j);
-				if (i > 0 && t.roomID != 0xFF) {
-					t.is_junction = true;
-					if (t.terrain == terrain::SECONDARY) {
-						t.terrain = terrain::NORMAL;
+void FinalizeJunctions(floor_t& floor) {
+	for (int x = 0; x < FLOOR_Y; x++) {
+		for (int y = 0; y < FLOOR_X; y++) {
+			tile& origin = floor[x][y];
+			if (origin.terrain == terrain::NORMAL && origin.roomID == NO_ROOM) {
+				tile& adjacent = floor[x-1][y];	//left
+				if (x > 0 && adjacent.roomID != NO_ROOM) {
+					adjacent.is_junction = true;
+					if (adjacent.terrain == terrain::SECONDARY) {
+						adjacent.terrain = terrain::NORMAL;
 					}
 				}
-				t = GetTile(i, j -1);
-				if (j > 0 && t.roomID != 0xFF) {
-					t.is_junction = true;
-					if (t.terrain == terrain::SECONDARY) {
-						t.terrain = terrain::NORMAL;
+				adjacent = floor[x][y-1];		//up
+				if (y > 0 && adjacent.roomID != NO_ROOM) {
+					adjacent.is_junction = true;
+					if (adjacent.terrain == terrain::SECONDARY) {
+						adjacent.terrain = terrain::NORMAL;
 					}
 				}
-				t = GetTile(i, j +1);
-				if (j < floor_y -1 && t.roomID != 0xFF) {
-					t.is_junction = true;
-					if (t.terrain == terrain::SECONDARY) {
-						t.terrain = terrain::NORMAL;
+				adjacent = floor[x][y+1];		//down
+				if (y < FLOOR_Y -1 && adjacent.roomID != NO_ROOM) {
+					adjacent.is_junction = true;
+					if (adjacent.terrain == terrain::SECONDARY) {
+						adjacent.terrain = terrain::NORMAL;
 					}
 				}
-				t = GetTile(i +1, j);
-				if (i < floor_x -1 && t.roomID != 0xFF) {
-					t.is_junction = true;
-					if (t.terrain == terrain::SECONDARY) {
-						t.terrain = terrain::NORMAL;
+				adjacent = floor[x+1][y];		//right
+				if (x < FLOOR_X -1 && adjacent.roomID != NO_ROOM) {
+					adjacent.is_junction = true;
+					if (adjacent.terrain == terrain::SECONDARY) {
+						adjacent.terrain = terrain::NORMAL;
 					}
 				}
 			}
-			else if (GetTile(i, j).roomID == 0xFE) {
-				GetTile(i, j).roomID = 0xFF;
+			else if (origin.roomID == JUNCTION_ROOM) {
+				origin.roomID = NO_ROOM;
 			}
 		}
 	}
 	//skipping counting all the junctions (function FUN_02340700)
+	return;
+}
+
+// void FinalizeJunctions(floor_t& floor) {
+// 	for (int x = 0; x < floor_x; x++) {
+// 		for (int y = 0; y < floor_y; y++) {
+// 			tile& origin = floor[x][y];
+// 			if (origin.terrain == terrain::NORMAL) {
+// 				if (origin.roomID == no_room) {
+// 					tile& adjacent = floor[x-1][y];	//left
+// 					if (x > 0 && adjacent.terrain != terrain::SECONDARY) {
+// 						adjacent.terrain = terrain::WALL;
+// 					}
+// 					adjacent = floor[x][y-1];	//up
+// 					if (y > 0 && adjacent.terrain != terrain::SECONDARY) {
+// 						adjacent.terrain = terrain::WALL;
+// 					}
+// 					adjacent = floor[x][y+1];	//down
+// 					if (x < floor_x && adjacent.terrain != terrain::SECONDARY) {
+// 						adjacent.terrain = terrain::WALL;
+// 					}
+// 					adjacent = floor[x+1][y];	//right
+// 					if (y < floor_y && adjacent.terrain != terrain::SECONDARY) {
+// 						adjacent.terrain = terrain::WALL;
+// 					}
+// 				}
+// 				else if (origin.roomID == junction_room) {
+// 					origin.roomID = no_room;
+// 				}
+// 			} 
+			
+// 		}
+// 	}
+// 	//Skipping unknown function FUN_02340700, it calculates something with room indices and writes some bytes into some unrelated(?) memory location
+// 	return;
+// }
+
+void GenerateSecondaryTerrainFormations(floor_t& floor, floor_properties floor_props, std::shared_ptr<PRNG> rng) {
+	if (floor_props.f_secondary_structures) {
+		// Mined from RAM contents
+		const std::array<int, 8> memoryBlock = {1, 1, 1, 2, 2, 2, 3, 3};
+		int rand_8 = rng->RandInt(8);
+		for (int r = memoryBlock[rand_8]; r <= 0; r--) {
+			int rand_100 = rng->RandInt(100);
+			int y_pos = 0x1f;
+			int y_offset = -1;
+			if (rand_100 < 0x31) {
+				int y_pos = 0;
+				int y_offset = 1;
+			} 
+			int x = rng->RandInt(0x32);
+			int x2 = x + 10;
+			int x_pos = rng->RandRange(2, FLOOR_X);
+			int x_offset = 0;
+			do {
+				int x = rng->RandInt(6);
+				int i = x+2;
+				while (i != 0) {
+					if (x_pos > -1 && x_pos < FLOOR_X) {
+						if (floor[x_pos][y_pos].terrain == terrain::SECONDARY) {
+							goto BREAK_B;
+						}
+						auto& tile = GetTile(floor, x_pos, y_pos);
+						if (tile.terrain == terrain::WALL) {
+							tile.terrain = terrain::SECONDARY;
+						}
+					}
+					i--;
+					x_pos = x_pos + x_offset;
+					y_pos = y_pos + y_offset;
+					if ((y_pos < 0) || (y_pos > FLOOR_Y-1)) {
+						break;
+					}
+					x2--;
+					if (x2 == 0) {
+
+						for (int i = 0; i < 0x40; i++) {
+							int x = rng->RandInt(7);
+							int y = rng->RandInt(7);
+
+							int x_calc = (x-3) + x_pos;	//temp variables
+							int y_calc = (y-3) + y_pos;
+							int x_temp;
+							int y_temp;
+
+							if (x_calc > -1 && x_calc < 0x36 && y_calc > -1 && y_calc < 0x1e) {		//maybe clean up?
+								if (floor[x_calc+1][y_calc+1].terrain != terrain::SECONDARY &&
+									floor[x_calc+1][y_calc].terrain != terrain::SECONDARY) 
+								{
+									if (floor[x_calc+1][y_calc-1].terrain != terrain::SECONDARY &&
+										floor[x_calc][y_calc+1].terrain != terrain::SECONDARY &&
+										floor[x_calc][y_calc-1].terrain != terrain::SECONDARY) 
+									{
+										if (floor[x_calc-1][y_calc+1].terrain != terrain::SECONDARY &&
+											floor[x_calc-1][y_calc].terrain != terrain::SECONDARY &&
+											floor[x_calc-1][y_calc-1].terrain != terrain::SECONDARY) 
+										{
+											goto BREAK_A;
+										}
+									}
+									x_temp = x_pos + (x - 3);
+									y_temp = y_pos + (y - 3);
+									if (x_temp > 0 && x_temp < FLOOR_X-1 && y_temp > 0 && y_temp < FLOOR_Y-1) {
+										auto& tile = GetTile(floor, x_pos, y_pos);
+										if (tile.terrain == terrain::WALL) {
+											tile.terrain = terrain::SECONDARY;
+										}
+									}
+BREAK_A:
+								}
+							}
+						}
+
+						for (int i = -3; i < 4; i++) {
+							for (int j = -3; j < 4; j++) {
+								while (j < 4) {
+									int x = i + x_pos;
+									int y = j + y_pos;
+									if (x > 1 && x < FLOOR_X -2 && y > 1 && y < FLOOR_Y -2) {
+										int secondary_terrain_count = 0;
+										secondary_terrain_count += (GetTile(floor, x+1, y+1).terrain == terrain::SECONDARY);
+										secondary_terrain_count += (GetTile(floor, x+1, y).terrain == terrain::SECONDARY);
+										secondary_terrain_count += (GetTile(floor, x+1, y-1).terrain == terrain::SECONDARY);
+										secondary_terrain_count += (GetTile(floor, x, 	y+1).terrain == terrain::SECONDARY);
+										secondary_terrain_count += (GetTile(floor, x, 	y-1).terrain == terrain::SECONDARY);
+										secondary_terrain_count += (GetTile(floor, x-1, y+1).terrain == terrain::SECONDARY);
+										secondary_terrain_count += (GetTile(floor, x-1, y).terrain == terrain::SECONDARY);
+										secondary_terrain_count += (GetTile(floor, x-1, y-1).terrain == terrain::SECONDARY);
+										if (secondary_terrain_count > 3 && GetTile(floor, x, y).terrain == terrain::WALL) {
+											GetTile(floor, x, y).terrain = terrain::SECONDARY;
+										}
+									}
+								}
+							}
+						}
+					} 
+				}
+
+				if (x_offset == 0) {
+					if (rng->RandInt(100) < 0x32) {
+						x_offset = -1;
+					}
+					else {
+						x_offset = 1;
+					}
+					y_offset = 0;
+				}
+				else {
+					if (rand_100 > 0x31) {
+						y_offset = 1;
+					}
+					else {
+						y_offset = -1;
+					}
+					x_offset = 0;
+				}
+			} while (y_pos > -1 && y_pos < FLOOR_Y);
+BREAK_B:
+		}
+
+		for (int terrain_density = 0; terrain_density < floor_props.secondary_terrain_density; terrain_density++) {
+			int x = 0;
+			int y = 0;
+			int i;
+			for (i = 0; i < 200; i++) {
+				x = rng->RandInt(100);
+				y = rng->RandInt(100);
+				if (x > 0 && x < FLOOR_X-1 && y > 0 && y < FLOOR_Y-1) {
+					break;
+				}
+			}
+
+			if (i != 200) {	
+				//randomize a flag field 
+				std::array<std::array<bool, 10>, 10> flags = {false};
+				for (int j = 0; j < 10; j++) {
+					if (i == 0 || i == 9 || j == 0 || j == 9) {
+						flags[i][j] = true;
+					}
+					for (int i = 0; i < 0x50; i++) {
+						int x = rng->RandInt(8);
+						int y = rng->RandInt(8);
+						auto& a = flags[x+1][y+1];
+						auto& b = flags[x][y];
+						if (!b) {
+							b = flags[x+2][y+2];
+						}
+						if (!(!b && !flags[x][y] && !flags[x+2][y+2])) {
+							a = true;
+						}
+					}
+				}
+
+				for (int i = 0; i < 10; i++) {
+					for (int j = 0; j < 10; j++) {
+						if (!flags[i][j]) {
+							auto& tile = GetTile(floor, i + x -5, j + y -5);
+							if (tile.terrain == terrain::WALL) {
+								tile.terrain = terrain::SECONDARY;
+							}
+						}
+					}
+				}
+			}
+		}
+		for (int i = 0; i < FLOOR_X; i++) {
+			for (int j = 0; j < FLOOR_Y; j++) {
+				auto& tile = GetTile(floor, i, j);
+				if (tile.terrain == terrain::SECONDARY) {
+					//TODO: skipping unbreakable checks, technically this could affect wall placement around unbreakable tiles (edges of map, and treasure rooms) but RNG state is not impacted
+					if ((i < 2) || (i < FLOOR_X-2) || (j < 2) || (j < FLOOR_Y-2)) {
+						tile.terrain = terrain::WALL;
+					}
+					else {
+						tile.terrain = terrain::NORMAL;
+					}
+				}
+			}
+		}
+	}
+}
+
+/* Used in the following functions to match decompile */
+struct coords {
+	int x = 0;
+	int y = 0;
+};
+
+void MarkNonEnemySpawns(floor_t& floor, status_vars var, floor_properties floor_props, bool itemless_monster_house, std::shared_ptr<PRNG> rng) {
+	std::array<coords, 32*56> field = {};
+	if (var.main_spawn_x == -1 || var.main_spawn_y == -1) {
+		int i = 0;
+		for (int x = 0; x < FLOOR_X; x++) {
+			for (int y = 0; y < FLOOR_Y; y++) {
+				auto& tile = GetTile(floor, x, y);
+				if ( tile.terrain == terrain::NORMAL && tile.roomID != NO_ROOM && tile.roomID != JUNCTION_ROOM && !tile.isKecleonShop && tile.entity != spawn_type::ENEMY && !tile.isKeyDoor) {
+					field[i].x = x;
+					field[i].y = y;					
+					i++;
+				}
+			}
+		}
+		if (i != 0) {
+			int rand_i = rng->RandInt(i);
+			SpawnStairs(field[rand_i], var);
+			if (floor_props.hidden_stairs_type != 0) {
+				for (; rand_i < i-1; rand_i++) {
+					field[rand_i].x = field[rand_i *2].x;
+					field[rand_i].x = field[rand_i *2].y;
+					i++;
+				}
+				/* This is where hidden stairs would be spawned, but those are placed based on an RNG value from PRNG#2, which changes too fast to track real-time and is not implemented here.
+				   In the future, it might be interesting to emulate this too as it is possible to manipulate PRNG#2 in some ways */
+			}
+		}
+
+	}
+
+	int i = 0;
+	for (int x = 0; x < FLOOR_X; x++) {
+		for (int y = 0; y < FLOOR_Y; y++) {
+			field[i].x = x;
+			field[i].y = y;
+			i++;
+		}
+	}
+	if (i != 0) {
+		int item_density = floor_props.item_density;
+		if (item_density != 0) {
+			item_density = std::max(0U, rng->RandRange(item_density-2, item_density+2));
+		}
+			item_density = 1;
+		}
+		if ()
+	}
+}
+
+/* This function would also handle hidden stairs and rescue floors, but those are not implemented. */
+void SpawnStairs(coords pos, status_vars var) {
+	var.floor[pos.x][pos.y].hasStairs = true;
+	var.stair_x = pos.x;
+	var.stair_y = pos.y;
+}
+
+void ConvertSecondaryTerrainToChasms(floor_t& floor) {
+	for (int x = 0; x < FLOOR_X; x++) {
+		for (int y = 0; y < FLOOR_Y; y++) {
+			auto tile = floor[x][y];
+			if (tile.terrain == terrain::SECONDARY) {
+				tile.terrain = terrain::CHASM;
+			}
+		}
+	}
+	return;
+}
+
+void ConvertWallsToChasms(floor_t& floor) {
+	for (int x = 0; x < FLOOR_X; x++) {
+		for (int y = 0; y < FLOOR_Y; y++) {
+			auto tile = floor[x][y];
+			if (tile.terrain == terrain::WALL) {
+				tile.terrain = terrain::CHASM;
+			}
+		}
+	}
 	return;
 }
