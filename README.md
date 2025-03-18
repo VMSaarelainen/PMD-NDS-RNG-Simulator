@@ -81,9 +81,9 @@ All of these are a high priority feature. Currently a blank floor (all wall tile
 | Accurate RNG simulation | Done | High |
 | All generators implemented | In progress | High |
 | Basic generation functions fully working | In progress* | High |
-| Spawn points and end tile simulation | TBD | High |
+| Spawn points and end tile simulation | In progress | High |
 | Floor validity check implemented | TBD | High |
-| Water/lava generation implemented | TBD | High |
+| Water/lava generation implemented | In progress | High |
 | Dump PMD1 generation parameters | TBD | Mid |
 | JSON output | TBD | Mid |
 | Sparse JSON output | TBD | Mid |
